@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 const API_KEY = process.env.RETELL_API_KEY
+console.log('API_KEY', API_KEY);
 
 export async function POST(request: NextRequest) {
   try {

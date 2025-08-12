@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import { RetellWebClient } from "retell-client-js-sdk"
 
-const agentId = process.env.RETELL_AGENT_ID!
+const agentId = process.env.NEXT_PUBLIC_RETELL_AGENT_ID!
+console.log('agentId', agentId);
 
 interface RegisterCallResponse {
   access_token: string

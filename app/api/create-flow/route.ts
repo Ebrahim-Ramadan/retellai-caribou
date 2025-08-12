@@ -22,36 +22,39 @@ export async function POST(request: NextRequest) {
       nodes: body.nodes ?? [],
     };
 
-    // Validate nodes for required function node properties
+    // Validate and transform nodes
     payload.nodes = payload.nodes.map((node: any) => {
       if (node.type === "function") {
         return {
           ...node,
           tool_id: node.tool_id ?? node.instruction?.name ?? "default_tool",
-          tool_type: node.tool_type ?? "custom_function",
+          tool_type: node.tool_type === "custom_function" ? "local" : node.tool_type ?? "local",
           wait_for_result: node.wait_for_result ?? true,
           instruction: {
             type: "prompt",
             text: node.instruction?.text ?? "Executing function",
           },
+          edges: (node.edges ?? []).map((edge: any) => ({
+            ...edge,
+            transition_condition: edge.transition_condition?.type === "equation"
+              ? {
+                  ...edge.transition_condition,
+                  equations: edge.transition_condition.equations.map((eq: any) => ({
+                    left: eq.variable ?? "result",
+                    operator: "==",
+                    right: eq.value ?? "success",
+                  })),
+                  operator: edge.transition_condition.operator ?? "&&",
+                }
+              : {
+                  type: "prompt",
+                  prompt: edge.transition_condition?.prompt ?? "Default transition",
+                },
+          })),
         };
       }
       return node;
     });
-
-    // Validate edges for transition_condition
-    payload.nodes = payload.nodes.map((node: any) => ({
-      ...node,
-      edges: (node.edges ?? []).map((edge: any) => ({
-        ...edge,
-        transition_condition: edge.transition_condition?.type === "equation"
-          ? edge.transition_condition
-          : {
-              type: "prompt",
-              prompt: edge.transition_condition?.prompt ?? "Default transition",
-            },
-      })),
-    }));
 
     const response = await fetch("https://api.retellai.com/create-conversation-flow", {
       method: "POST",
@@ -65,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       return NextResponse.json(
-        { error: errorData.message || errorData.error || "Failed to create flow", status: response.status },
+        { error: errorData.error_message || errorData.error || "Failed to create flow", status: response.status },
         { status: response.status }
       );
     }
