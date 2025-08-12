@@ -1,103 +1,365 @@
-import Image from "next/image";
+"use client"
+
+import { useEffect, useState } from "react"
+import { RetellWebClient } from "retell-client-js-sdk"
+
+const agentId = process.env.RETELL_AGENT_ID!
+
+interface RegisterCallResponse {
+  access_token: string
+}
+
+const retellWebClient = new RetellWebClient()
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [isCalling, setIsCalling] = useState(false)
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isAgentTalking, setIsAgentTalking] = useState(false)
+  const [currentOrder, setCurrentOrder] = useState<string[]>([])
+  const [showOrder, setShowOrder] = useState(false)
+  const [animatingItems, setAnimatingItems] = useState<number[]>([])
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    checkMicrophonePermission()
+  }, [])
+
+  useEffect(() => {
+    if (currentOrder.length > 0) {
+      setShowOrder(true)
+    } else {
+      setShowOrder(false)
+    }
+  }, [currentOrder])
+
+  const checkMicrophonePermission = async () => {
+    try {
+      const permission = await navigator.permissions.query({ name: "microphone" as PermissionName })
+      setHasPermission(permission.state === "granted")
+
+      permission.addEventListener("change", () => {
+        setHasPermission(permission.state === "granted")
+      })
+    } catch (err) {
+      console.warn("Permission API not supported, will request permission on call start")
+      setHasPermission(null)
+    }
+  }
+
+  const requestMicrophonePermission = async (): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach((track) => track.stop())
+      setHasPermission(true)
+      setError(null)
+      return true
+    } catch (err) {
+      console.error("Microphone permission denied:", err)
+      setHasPermission(false)
+      setError("Microphone permission is required for voice calls. Please allow microphone access and try again.")
+      return false
+    }
+  }
+
+  useEffect(() => {
+    retellWebClient.on("call_started", () => {
+      console.log("call started")
+      setCurrentOrder([])
+      setAnimatingItems([])
+    })
+
+    retellWebClient.on("call_ended", () => {
+      console.log("call ended")
+      setIsCalling(false)
+      setIsAgentTalking(false)
+    })
+
+    retellWebClient.on("agent_start_talking", () => {
+      console.log("agent_start_talking")
+      setIsAgentTalking(true)
+    })
+
+    retellWebClient.on("agent_stop_talking", () => {
+      console.log("agent_stop_talking")
+      setIsAgentTalking(false)
+    })
+
+    retellWebClient.on("update", (update) => {
+      if (update.transcript) {
+        const messages = update.transcript.filter((item: any) => item.role && item.content)
+
+        const orderItems =
+          messages
+            .filter((msg: any) => msg.role === "agent")
+            .map((msg: any) => msg.content)
+            .join(" ")
+            .match(/(?:added|ordered|got)\s+([^.!?]+)/gi) || []
+
+        const newItems = orderItems.map((item) => item.replace(/(?:added|ordered|got)\s+/i, ""))
+
+        if (newItems.length > currentOrder.length) {
+          const newItemIndex = newItems.length - 1
+          setAnimatingItems((prev) => [...prev, newItemIndex])
+          setTimeout(() => {
+            setAnimatingItems((prev) => prev.filter((i) => i !== newItemIndex))
+          }, 600)
+        }
+
+        setCurrentOrder(newItems)
+      }
+    })
+
+    retellWebClient.on("metadata", (metadata) => {
+      // console.log(metadata);
+    })
+
+    retellWebClient.on("error", (error) => {
+      console.error("An error occurred:", error)
+      setError(`Call error: ${error.message || "Unknown error occurred"}`)
+      setIsCalling(false)
+      retellWebClient.stopCall()
+    })
+  }, [currentOrder])
+
+  const toggleConversation = async () => {
+    if (isCalling) {
+      retellWebClient.stopCall()
+      setIsCalling(false)
+    } else {
+      const hasPermissionNow = hasPermission || (await requestMicrophonePermission())
+
+      if (!hasPermissionNow) {
+        return
+      }
+
+      try {
+        setError(null)
+        const registerCallResponse = await registerCall(agentId)
+        if (registerCallResponse.access_token) {
+          await retellWebClient.startCall({
+            accessToken: registerCallResponse.access_token,
+          })
+          setIsCalling(true)
+        }
+      } catch (err) {
+        console.error("Failed to start call:", err)
+        setError("Failed to start call. Please try again.")
+        setIsCalling(false)
+      }
+    }
+  }
+
+  async function registerCall(agentId: string): Promise<RegisterCallResponse> {
+    try {
+      const response = await fetch("/api/create-web-call", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          agent_id: agentId,
+        }),
+      })
+
+      // Check if response is ok first
+      if (!response.ok) {
+        let errorMessage = `HTTP Error: ${response.status}`
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.error || errorMessage
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
+
+      // Ensure response is valid JSON
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Invalid response format - expected JSON")
+      }
+
+      const data: RegisterCallResponse = await response.json()
+
+      // Validate required fields
+      if (!data.access_token) {
+        throw new Error("Invalid response - missing access token")
+      }
+
+      return data
+    } catch (err) {
+      console.error("Register call error:", err)
+      const errorMessage = err instanceof Error ? err.message : "Failed to register call"
+      throw new Error(errorMessage)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-10 left-10 w-32 h-32 bg-amber-800 rounded-full blur-3xl animate-pulse"></div>
+        <div
+          className="absolute top-40 right-20 w-24 h-24 bg-red-800 rounded-full blur-2xl animate-pulse"
+          style={{ animationDelay: "1s" }}
+        ></div>
+        <div
+          className="absolute bottom-20 left-1/3 w-40 h-40 bg-orange-800 rounded-full blur-3xl animate-pulse"
+          style={{ animationDelay: "2s" }}
+        ></div>
+      </div>
+
+      <div className="relative z-10 min-h-screen flex flex-col">
+        {/* Header */}
+        <header className="text-center py-6 px-4 animate-in fade-in duration-1000">
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-600 to-red-700 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110">
+              <span className="text-white text-xl">☕</span>
+            </div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-800 via-red-700 to-amber-900 bg-clip-text text-transparent">
+              Caribou Coffee Egypt
+            </h1>
+          </div>
+          <p className="text-amber-700 text-lg font-medium">Voice Ordering Assistant</p>
+        </header>
+
+        {/* Error message */}
+        {error && (
+          <div className="mx-4 mb-4 animate-in slide-in-from-top duration-500">
+            <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-2xl max-w-md mx-auto">
+              <p className="text-sm font-medium text-center">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Main content area */}
+        <div className="flex-1 flex items-center justify-center px-4 pb-32">
+          <div className="w-full max-w-lg">
+            {/* Welcome state */}
+            <div
+              className={`transition-all duration-700 ease-in-out ${
+                showOrder ? "opacity-0 scale-95 pointer-events-none absolute" : "opacity-100 scale-100"
+              }`}
+            >
+              <div className="text-center animate-in fade-in duration-1000">
+                <div
+                  className={`w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-200 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 ${
+                    isCalling ? "animate-pulse scale-110" : "hover:scale-105"
+                  }`}
+                >
+                  <span className="text-4xl">☕</span>
+                </div>
+                <h2 className="text-2xl font-bold text-amber-800 mb-2">Ready to Order?</h2>
+                <p className={`text-amber-600 text-lg transition-all duration-500 ${isCalling ? "animate-pulse" : ""}`}>
+                  {isCalling ? "Listening to your order..." : "Tap the mic button below to start"}
+                </p>
+                {isCalling && (
+                  <div className="flex items-center justify-center gap-2 mt-4 text-green-700 animate-in slide-in-from-bottom duration-500">
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                    <p className="font-medium">Voice assistant is active</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Order display */}
+            <div
+              className={`transition-all duration-700 ease-in-out ${
+                showOrder ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+              }`}
+            >
+              <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-amber-200 animate-in fade-in slide-in-from-bottom duration-700">
+                <h3 className="text-2xl font-bold text-amber-800 mb-6 text-center flex items-center justify-center gap-2">
+                  <span className="w-8 h-8 bg-gradient-to-br from-amber-500 to-red-500 rounded-full flex items-center justify-center text-white text-lg animate-in zoom-in duration-500">
+                    🛒
+                  </span>
+                  Your Order
+                </h3>
+
+                <div className="space-y-4">
+                  {currentOrder.map((item, index) => (
+                    <div
+                      key={index}
+                      className={`flex items-center gap-4 p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 shadow-sm transition-all duration-500 hover:shadow-md hover:scale-[1.02] ${
+                        animatingItems.includes(index)
+                          ? "animate-in slide-in-from-left duration-600 scale-105"
+                          : "animate-in fade-in slide-in-from-bottom duration-500"
+                      }`}
+                      style={{ animationDelay: `${index * 100}ms` }}
+                    >
+                      <span
+                        className={`w-10 h-10 bg-gradient-to-br from-amber-400 to-red-500 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0 transition-all duration-300 ${
+                          animatingItems.includes(index) ? "animate-bounce" : ""
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
+                      <span className="text-gray-800 font-medium text-lg">{item}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {isCalling && (
+                  <div className="flex items-center justify-center gap-2 mt-6 text-green-700 animate-in slide-in-from-bottom duration-500">
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                    <p className="font-medium">Add more items by speaking...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Floating mic button */}
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-20 animate-in slide-in-from-bottom duration-1000">
+          <div className="flex flex-col items-center gap-4">
+            {hasPermission === false && (
+              <div className="bg-amber-100 border border-amber-300 text-amber-800 px-4 py-2 rounded-full text-sm font-medium animate-in slide-in-from-bottom duration-500 animate-bounce">
+                🎤 Microphone access needed
+              </div>
+            )}
+
+            <button
+              onClick={toggleConversation}
+              disabled={hasPermission === false && !isCalling}
+              className={`relative w-20 h-20 rounded-full transition-all duration-500 transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-2xl ${
+                isCalling
+                  ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/50 animate-pulse"
+                  : "bg-gradient-to-br from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 shadow-amber-500/50"
+              }`}
+            >
+              <div
+                className={`w-full h-full rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center transition-all duration-500 ${
+                  isAgentTalking ? "animate-bounce scale-110" : ""
+                }`}
+              >
+                <span
+                  className={`text-3xl text-white transition-all duration-300 ${isAgentTalking ? "animate-pulse" : ""}`}
+                >
+                  {isCalling ? (isAgentTalking ? "🗣️" : "👂") : "🎤"}
+                </span>
+              </div>
+
+              {isCalling && (
+                <>
+                  <div className="absolute inset-0 rounded-full border-4 border-white/30 animate-ping"></div>
+                  <div
+                    className="absolute inset-0 rounded-full border-2 border-white/20 animate-ping"
+                    style={{ animationDelay: "0.5s" }}
+                  ></div>
+                </>
+              )}
+            </button>
+
+            <p
+              className={`text-amber-700 font-medium text-sm transition-all duration-300 ${isCalling ? "animate-pulse" : ""}`}
+            >
+              {isCalling ? "Tap to end order" : "Tap to start ordering"}
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
-  );
+  )
 }
