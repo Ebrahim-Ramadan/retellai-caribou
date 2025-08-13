@@ -1,154 +1,171 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { RetellWebClient } from "retell-client-js-sdk"
+import { useEffect, useState } from "react";
+import { RetellWebClient } from "retell-client-js-sdk";
+import Image from "next/image";
 
-const agentId = process.env.NEXT_PUBLIC_RETELL_AGENT_ID!
-console.log('agentId', agentId);
+const agentId = process.env.NEXT_PUBLIC_RETELL_AGENT_ID!;
+console.log("agentId", agentId);
 
 interface RegisterCallResponse {
-  access_token: string
+  access_token: string;
 }
 
-const retellWebClient = new RetellWebClient()
+const retellWebClient = new RetellWebClient();
 
 export default function Home() {
-  const [isCalling, setIsCalling] = useState(false)
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [isAgentTalking, setIsAgentTalking] = useState(false)
-  const [currentOrder, setCurrentOrder] = useState<string[]>([])
-  const [showOrder, setShowOrder] = useState(false)
-  const [animatingItems, setAnimatingItems] = useState<number[]>([])
+  const [isCalling, setIsCalling] = useState(false);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isAgentTalking, setIsAgentTalking] = useState(false);
+  const [currentOrder, setCurrentOrder] = useState<string[]>([]);
+  const [showOrder, setShowOrder] = useState(false);
+  const [animatingItems, setAnimatingItems] = useState<number[]>([]);
+  const [currentImage, setCurrentImage] = useState<string | null>(null); // State for image
 
   useEffect(() => {
-    checkMicrophonePermission()
-  }, [])
+    checkMicrophonePermission();
+  }, []);
 
   useEffect(() => {
     if (currentOrder.length > 0) {
-      setShowOrder(true)
+      setShowOrder(true);
     } else {
-      setShowOrder(false)
+      setShowOrder(false);
     }
-  }, [currentOrder])
+  }, [currentOrder]);
 
   const checkMicrophonePermission = async () => {
     try {
-      const permission = await navigator.permissions.query({ name: "microphone" as PermissionName })
-      setHasPermission(permission.state === "granted")
+      const permission = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      setHasPermission(permission.state === "granted");
 
       permission.addEventListener("change", () => {
-        setHasPermission(permission.state === "granted")
-      })
+        setHasPermission(permission.state === "granted");
+      });
     } catch (err) {
-      console.warn("Permission API not supported, will request permission on call start")
-      setHasPermission(null)
+      console.warn("Permission API not supported, will request permission on call start");
+      setHasPermission(null);
     }
-  }
+  };
 
   const requestMicrophonePermission = async (): Promise<boolean> => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach((track) => track.stop())
-      setHasPermission(true)
-      setError(null)
-      return true
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      setHasPermission(true);
+      setError(null);
+      return true;
     } catch (err) {
-      console.error("Microphone permission denied:", err)
-      setHasPermission(false)
-      setError("Microphone permission is required for voice calls. Please allow microphone access and try again.")
-      return false
+      console.error("Microphone permission denied:", err);
+      setHasPermission(false);
+      setError("Microphone permission is required for voice calls. Please allow microphone access and try again.");
+      return false;
     }
-  }
+  };
 
   useEffect(() => {
     retellWebClient.on("call_started", () => {
-      console.log("call started")
-      setCurrentOrder([])
-      setAnimatingItems([])
-    })
+      console.log("call started");
+      setCurrentOrder([]);
+      setAnimatingItems([]);
+      setCurrentImage(null); // Reset image on call start
+    });
 
     retellWebClient.on("call_ended", () => {
-      console.log("call ended")
-      setIsCalling(false)
-      setIsAgentTalking(false)
-    })
+      console.log("call ended");
+      setIsCalling(false);
+      setIsAgentTalking(false);
+      setCurrentImage(null); // Reset image on call end
+    });
 
     retellWebClient.on("agent_start_talking", () => {
-      console.log("agent_start_talking")
-      setIsAgentTalking(true)
-    })
+      console.log("agent_start_talking");
+      setIsAgentTalking(true);
+    });
 
     retellWebClient.on("agent_stop_talking", () => {
-      console.log("agent_stop_talking")
-      setIsAgentTalking(false)
-    })
+      console.log("agent_stop_talking");
+      setIsAgentTalking(false);
+    });
 
     retellWebClient.on("update", (update) => {
       if (update.transcript) {
-        const messages = update.transcript.filter((item: any) => item.role && item.content)
+        const messages = update.transcript.filter((item: any) => item.role && item.content);
 
         const orderItems =
           messages
             .filter((msg: any) => msg.role === "agent")
             .map((msg: any) => msg.content)
             .join(" ")
-            .match(/(?:added|ordered|got)\s+([^.!?]+)/gi) || []
+            .match(/(?:added|ordered|got)\s+([^.!?]+)/gi) || [];
 
-        const newItems = orderItems.map((item) => item.replace(/(?:added|ordered|got)\s+/i, ""))
+        const newItems = orderItems.map((item) => item.replace(/(?:added|ordered|got)\s+/i, ""));
 
         if (newItems.length > currentOrder.length) {
-          const newItemIndex = newItems.length - 1
-          setAnimatingItems((prev) => [...prev, newItemIndex])
+          const newItemIndex = newItems.length - 1;
+          setAnimatingItems((prev) => [...prev, newItemIndex]);
           setTimeout(() => {
-            setAnimatingItems((prev) => prev.filter((i) => i !== newItemIndex))
-          }, 600)
+            setAnimatingItems((prev) => prev.filter((i) => i !== newItemIndex));
+          }, 600);
         }
 
-        setCurrentOrder(newItems)
+        setCurrentOrder(newItems);
+
+        // Detect specific items for images
+        const transcriptText = messages
+          .filter((msg: any) => msg.role === "user")
+          .map((msg: any) => msg.content.toLowerCase())
+          .join(" ");
+        if (transcriptText.includes("almond milk drink")) {
+          setCurrentImage("/almond milk drink.png");
+        } else if (transcriptText.includes("herbal tea")) {
+          setCurrentImage("/herbal tea.png");
+        } else {
+          setCurrentImage(null); // Reset if no match
+        }
       }
-    })
+    });
 
     retellWebClient.on("metadata", (metadata) => {
       // console.log(metadata);
-    })
+    });
 
     retellWebClient.on("error", (error) => {
-      console.error("An error occurred:", error)
-      setError(`Call error: ${error.message || "Unknown error occurred"}`)
-      setIsCalling(false)
-      retellWebClient.stopCall()
-    })
-  }, [currentOrder])
+      console.error("An error occurred:", error);
+      setError(`Call error: ${error.message || "Unknown error occurred"}`);
+      setIsCalling(false);
+      retellWebClient.stopCall();
+    });
+  }, [currentOrder]);
 
   const toggleConversation = async () => {
     if (isCalling) {
-      retellWebClient.stopCall()
-      setIsCalling(false)
+      retellWebClient.stopCall();
+      setIsCalling(false);
     } else {
-      const hasPermissionNow = hasPermission || (await requestMicrophonePermission())
+      const hasPermissionNow = hasPermission || (await requestMicrophonePermission());
 
       if (!hasPermissionNow) {
-        return
+        return;
       }
 
       try {
-        setError(null)
-        const registerCallResponse = await registerCall(agentId)
+        setError(null);
+        const registerCallResponse = await registerCall(agentId);
         if (registerCallResponse.access_token) {
           await retellWebClient.startCall({
             accessToken: registerCallResponse.access_token,
-          })
-          setIsCalling(true)
+          });
+          setIsCalling(true);
         }
       } catch (err) {
-        console.error("Failed to start call:", err)
-        setError("Failed to start call. Please try again.")
-        setIsCalling(false)
+        console.error("Failed to start call:", err);
+        setError("Failed to start call. Please try again.");
+        setIsCalling(false);
       }
     }
-  }
+  };
 
   async function registerCall(agentId: string): Promise<RegisterCallResponse> {
     try {
@@ -160,39 +177,35 @@ export default function Home() {
         body: JSON.stringify({
           agent_id: agentId,
         }),
-      })
+      });
 
-      // Check if response is ok first
       if (!response.ok) {
-        let errorMessage = `HTTP Error: ${response.status}`
+        let errorMessage = `HTTP Error: ${response.status}`;
         try {
-          const errorData = await response.json()
-          errorMessage = errorData.error || errorMessage
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
         } catch {
-          // If response is not JSON, use status text
-          errorMessage = response.statusText || errorMessage
+          errorMessage = response.statusText || errorMessage;
         }
-        throw new Error(errorMessage)
+        throw new Error(errorMessage);
       }
 
-      // Ensure response is valid JSON
-      const contentType = response.headers.get("content-type")
+      const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Invalid response format - expected JSON")
+        throw new Error("Invalid response format - expected JSON");
       }
 
-      const data: RegisterCallResponse = await response.json()
+      const data: RegisterCallResponse = await response.json();
 
-      // Validate required fields
       if (!data.access_token) {
-        throw new Error("Invalid response - missing access token")
+        throw new Error("Invalid response - missing access token");
       }
 
-      return data
+      return data;
     } catch (err) {
-      console.error("Register call error:", err)
-      const errorMessage = err instanceof Error ? err.message : "Failed to register call"
-      throw new Error(errorMessage)
+      console.error("Register call error:", err);
+      const errorMessage = err instanceof Error ? err.message : "Failed to register call";
+      throw new Error(errorMessage);
     }
   }
 
@@ -231,6 +244,13 @@ export default function Home() {
             <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-2xl max-w-md mx-auto">
               <p className="text-sm font-medium text-center">{error}</p>
             </div>
+          </div>
+        )}
+
+        {/* Image display */}
+        {currentImage && (
+          <div className="mx-auto mt-4 max-w-md animate-in fade-in duration-500">
+            <Image src={currentImage} alt="Selected product" width={300} height={300} className="rounded-lg shadow-md" />
           </div>
         )}
 
@@ -362,5 +382,5 @@ export default function Home() {
         </div>
       </div>
     </div>
-  )
+  );
 }
