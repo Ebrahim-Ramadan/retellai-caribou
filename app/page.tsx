@@ -21,7 +21,7 @@ export default function Home() {
   const [currentOrder, setCurrentOrder] = useState<string[]>([]);
   const [showOrder, setShowOrder] = useState(false);
   const [animatingItems, setAnimatingItems] = useState<number[]>([]);
-  const [currentImage, setCurrentImage] = useState<string | null>(null); // State for image
+  const [currentImage, setCurrentImage] = useState<string | null>(null);
 
   useEffect(() => {
     checkMicrophonePermission();
@@ -69,14 +69,14 @@ export default function Home() {
       console.log("call started");
       setCurrentOrder([]);
       setAnimatingItems([]);
-      setCurrentImage(null); // Reset image on call start
+      setCurrentImage(null);
     });
 
     retellWebClient.on("call_ended", () => {
       console.log("call ended");
       setIsCalling(false);
       setIsAgentTalking(false);
-      setCurrentImage(null); // Reset image on call end
+      setCurrentImage(null);
     });
 
     retellWebClient.on("agent_start_talking", () => {
@@ -112,7 +112,6 @@ export default function Home() {
 
         setCurrentOrder(newItems);
 
-        // Detect specific items for images
         const transcriptText = messages
           .filter((msg: any) => msg.role === "user")
           .map((msg: any) => msg.content.toLowerCase())
@@ -122,7 +121,7 @@ export default function Home() {
         } else if (transcriptText.includes("herbal tea")) {
           setCurrentImage("/herbal tea.png");
         } else {
-          setCurrentImage(null); // Reset if no match
+          setCurrentImage(null);
         }
       }
     });
@@ -210,9 +209,9 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 relative overflow-hidden flex flex-col items-center">
       {/* Background decorative elements */}
-      <div className="absolute inset-0 opacity-5">
+      <div className="absolute inset-0 opacity-30">
         <div className="absolute top-10 left-10 w-32 h-32 bg-amber-800 rounded-full blur-3xl animate-pulse"></div>
         <div
           className="absolute top-40 right-20 w-24 h-24 bg-red-800 rounded-full blur-2xl animate-pulse"
@@ -224,54 +223,59 @@ export default function Home() {
         ></div>
       </div>
 
-      <div className="relative z-10 min-h-screen flex flex-col">
-        {/* Header */}
-        <header className="text-center py-6 px-4 animate-in fade-in duration-1000">
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-600 to-red-700 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110">
-              <span className="text-white text-xl">☕</span>
+      {/* Header */}
+      <header className="text-center py-6 px-4 w-full animate-in fade-in duration-1000">
+        <div className="flex items-center justify-center gap-3 mb-2">
+          <div className="w-10 h-10 bg-gradient-to-br from-amber-600 to-red-700 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110">
+            <span className="text-white text-xl">☕</span>
+          </div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-800 via-red-700 to-amber-900 bg-clip-text text-transparent">
+            Caribou Coffee Egypt
+          </h1>
+        </div>
+        <p className="text-amber-700 text-lg font-medium">Voice Ordering Assistant</p>
+      </header>
+
+      {/* Main content container */}
+      <main className="flex-1 flex items-center justify-center w-full px-4">
+        <div className="w-full max-w-lg flex flex-col items-center gap-6">
+          {/* Error message */}
+          {error && (
+            <div className="w-full animate-in slide-in-from-top duration-500">
+              <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-2xl max-w-md mx-auto text-center">
+                <p className="text-sm font-medium">{error}</p>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-800 via-red-700 to-amber-900 bg-clip-text text-transparent">
-              Caribou Coffee Egypt
-            </h1>
-          </div>
-          <p className="text-amber-700 text-lg font-medium">Voice Ordering Assistant</p>
-        </header>
+          )}
 
-        {/* Error message */}
-        {error && (
-          <div className="mx-4 mb-4 animate-in slide-in-from-top duration-500">
-            <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-2xl max-w-md mx-auto">
-              <p className="text-sm font-medium text-center">{error}</p>
+          {/* Image display with animation */}
+          {currentImage && (
+            <div className="w-full max-w-xs animate-image-show">
+              <Image
+                src={currentImage}
+                alt="Selected product"
+                width={300}
+                height={300}
+                className="rounded-lg shadow-md object-cover transition-all duration-700 ease-out"
+              />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Image display */}
-        {currentImage && (
-          <div className="mx-auto mt-4 max-w-md animate-in fade-in duration-500">
-            <Image src={currentImage} alt="Selected product" width={300} height={300} className="rounded-lg shadow-md" />
-          </div>
-        )}
-
-        {/* Main content area */}
-        <div className="flex-1 flex items-center justify-center px-4 pb-32">
-          <div className="w-full max-w-lg">
-            {/* Welcome state */}
+          {/* Welcome or Order display */}
+          <div className="w-full max-w-md">
             <div
               className={`transition-all duration-700 ease-in-out ${
                 showOrder ? "opacity-0 scale-95 pointer-events-none absolute" : "opacity-100 scale-100"
               }`}
             >
               <div className="text-center animate-in fade-in duration-1000">
-                <div
+                {/* <div
                   className={`w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-200 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 ${
                     isCalling ? "animate-pulse scale-110" : "hover:scale-105"
                   }`}
                 >
-                  <span className="text-4xl">☕</span>
-                </div>
-                <h2 className="text-2xl font-bold text-amber-800 mb-2">Ready to Order?</h2>
+                </div> */}
+                {/* <h2 className="text-2xl font-bold text-amber-800 mb-2">Ready to Order?</h2>
                 <p className={`text-amber-600 text-lg transition-all duration-500 ${isCalling ? "animate-pulse" : ""}`}>
                   {isCalling ? "Listening to your order..." : "Tap the mic button below to start"}
                 </p>
@@ -280,29 +284,20 @@ export default function Home() {
                     <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                     <p className="font-medium">Voice assistant is active</p>
                   </div>
-                )}
+                )} */}
               </div>
             </div>
 
-            {/* Order display */}
             <div
               className={`transition-all duration-700 ease-in-out ${
                 showOrder ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
               }`}
             >
-              <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-amber-200 animate-in fade-in slide-in-from-bottom duration-700">
-                <h3 className="text-2xl font-bold text-amber-800 mb-6 text-center flex items-center justify-center gap-2">
-                  <span className="w-8 h-8 bg-gradient-to-br from-amber-500 to-red-500 rounded-full flex items-center justify-center text-white text-lg animate-in zoom-in duration-500">
-                    🛒
-                  </span>
-                  Your Order
-                </h3>
-
-                <div className="space-y-4">
+                  <div className="space-y-4">
                   {currentOrder.map((item, index) => (
                     <div
                       key={index}
-                      className={`flex items-center gap-4 p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 shadow-sm transition-all duration-500 hover:shadow-md hover:scale-[1.02] ${
+                      className={`flex animate-[growShrink_1.5s_ease-in-out_infinite] items-center gap-4 p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 shadow-sm transition-all duration-500 hover:shadow-md hover:scale-[1.02] ${
                         animatingItems.includes(index)
                           ? "animate-in slide-in-from-left duration-600 scale-105"
                           : "animate-in fade-in slide-in-from-bottom duration-500"
@@ -320,65 +315,57 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-
-                {isCalling && (
-                  <div className="flex items-center justify-center gap-2 mt-6 text-green-700 animate-in slide-in-from-bottom duration-500">
-                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                    <p className="font-medium">Add more items by speaking...</p>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>
+      </main>
 
-        {/* Floating mic button */}
-        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-20 animate-in slide-in-from-bottom duration-1000">
-          <div className="flex flex-col items-center gap-4">
-            {hasPermission === false && (
-              <div className="bg-amber-100 border border-amber-300 text-amber-800 px-4 py-2 rounded-full text-sm font-medium animate-in slide-in-from-bottom duration-500 animate-bounce">
-                🎤 Microphone access needed
-              </div>
-            )}
+      {/* Floating mic button */}
+      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-20 animate-in slide-in-from-bottom duration-400 animate-pulse">
+        <div className="flex flex-col items-center gap-4">
+          {hasPermission === false && (
+            <div className="bg-amber-100 border border-amber-300 text-amber-800 px-4 py-2 rounded-full text-sm font-medium animate-in slide-in-from-bottom duration-500 animate-bounce">
+              🎤 Microphone access needed
+            </div>
+          )}
 
-            <button
-              onClick={toggleConversation}
-              disabled={hasPermission === false && !isCalling}
-              className={`relative w-20 h-20 rounded-full transition-all duration-500 transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-2xl ${
-                isCalling
-                  ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/50 animate-pulse"
-                  : "bg-gradient-to-br from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 shadow-amber-500/50"
+          <button
+            onClick={toggleConversation}
+            disabled={hasPermission === false && !isCalling}
+            className={`relative w-20 h-20 rounded-full transition-all duration-500 transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-2xl ${
+              isCalling
+                ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/50 animate-pulse"
+                : "bg-gradient-to-br from-amber-500 to-red-500 hover:from-amber-600 hover:to-red-600 shadow-amber-500/50"
+            }`}
+          >
+            <div
+              className={`w-full h-full rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center transition-all duration-500 ${
+                isAgentTalking ? "animate-bounce scale-110" : ""
               }`}
             >
-              <div
-                className={`w-full h-full rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center transition-all duration-500 ${
-                  isAgentTalking ? "animate-bounce scale-110" : ""
-                }`}
+              <span
+                className={`text-3xl text-white transition-all duration-300 ${isAgentTalking ? "animate-pulse" : ""}`}
               >
-                <span
-                  className={`text-3xl text-white transition-all duration-300 ${isAgentTalking ? "animate-pulse" : ""}`}
-                >
-                  {isCalling ? (isAgentTalking ? "🗣️" : "👂") : "🎤"}
-                </span>
-              </div>
+                {isCalling ? (isAgentTalking ? "🗣️" : "👂") : "🎤"}
+              </span>
+            </div>
 
-              {isCalling && (
-                <>
-                  <div className="absolute inset-0 rounded-full border-4 border-white/30 animate-ping"></div>
-                  <div
-                    className="absolute inset-0 rounded-full border-2 border-white/20 animate-ping"
-                    style={{ animationDelay: "0.5s" }}
-                  ></div>
-                </>
-              )}
-            </button>
+            {isCalling && (
+              <>
+                <div className="absolute inset-0 rounded-full border-4 border-white/30 animate-ping"></div>
+                <div
+                  className="absolute inset-0 rounded-full border-2 border-white/20 animate-ping"
+                  style={{ animationDelay: "0.5s" }}
+                ></div>
+              </>
+            )}
+          </button>
 
-            <p
-              className={`text-amber-700 font-medium text-sm transition-all duration-300 ${isCalling ? "animate-pulse" : ""}`}
-            >
-              {isCalling ? "Tap to end order" : "Tap to start ordering"}
-            </p>
-          </div>
+          <p
+            className={`text-amber-700 font-medium text-sm transition-all duration-300 ${isCalling ? "animate-pulse" : ""}`}
+          >
+            {isCalling ? "Tap to end order" : "Tap to start ordering"}
+          </p>
         </div>
       </div>
     </div>
